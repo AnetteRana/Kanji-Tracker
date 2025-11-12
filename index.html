@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>JLPT Kanji Tracker (Import JSON)</title>
+  <style>
+    :root {
+      --bg: #0b0b0d;
+      --panel: #141418;
+      --muted: #9aa0a6;
+      --text: #ffffff;
+      --accent: #7dd3fc;
+      --accent-2: #a7f3d0;
+      --ring: #2a2a33;
+      --good: #10b981;
+      --warn: #f59e0b;
+      --bad: #ef4444;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
+      background: radial-gradient(1200px 800px at 10% -10%, #111224, #0b0b0d);
+      color: var(--text);
+      letter-spacing: .2px;
+    }
+    header { position: sticky; top: 0; z-index: 5; background: linear-gradient(180deg, rgba(11,11,13,.95), rgba(11,11,13,.85)); backdrop-filter: blur(6px); border-bottom: 1px solid var(--ring); }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 16px; }
+    h1 { font-size: clamp(22px, 3vw, 28px); margin: 0 0 6px; }
+    .sub { color: var(--muted); font-size: 14px; }
+
+    .controls { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: start; margin-top: 14px; }
+    .controls > * { min-height: 36px; }
+    input[type="search"], .btn { background: var(--panel); border: 1px solid var(--ring); color: var(--text); padding: 8px 10px; border-radius: 12px; font-size: 14px; }
+    #search { width: 180px; }
+    .btn { cursor: pointer; transition: transform .04s ease; }
+    .btn:active { transform: translateY(1px); }
+    .btn.mini { padding: 6px 8px; font-size: 12px; border-radius: 10px; }
+    .btn[aria-pressed="true"] { outline: 2px solid #3b82f6; }
+
+    .toggles { display:flex; align-items:flex-start; gap:10px; flex-wrap:wrap; }
+    .stack { display:flex; flex-direction:column; gap:6px; }
+    .chipbar { display:flex; gap:6px; flex-wrap:wrap; }
+
+    .stats { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; margin-top: 12px; }
+    .card { background: var(--panel); border: 1px solid var(--ring); border-radius: 16px; padding: 12px; }
+    .stat-big { font-size: 22px; font-weight: 700; }
+    .bar { height: 10px; background: #1f2330; border-radius: 999px; overflow: hidden; border: 1px solid var(--ring); }
+    .bar > i { display: block; height: 100%; width: 0%; background: linear-gradient(90deg, #34d399, #fbbf24); }
+
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 10px; margin: 16px 0 120px; }
+    .tile { aspect-ratio: 1 / 1; border-radius: 18px; display: grid; place-items: center; border: 2px solid transparent; background: #0f1117; cursor: pointer; position: relative; user-select: none; transition: box-shadow .15s ease, transform .06s ease, background .2s ease, border-color .2s ease; font-size: 30px; font-weight: 600; color: var(--text); }
+    .tile:active { transform: translateY(1px); }
+    .tile.known { border-color: rgba(16,185,129,.5); box-shadow: 0 0 0 2px rgba(16,185,129,.2) inset; }
+    .tile.unknown { border-color: var(--bad); box-shadow: 0 0 0 2px rgba(239,68,68,.15) inset; }
+
+    .tip { position: fixed; pointer-events: none; z-index: 20; background: #0e1422; color: #e5e7eb; border: 1px solid #1f2a44; border-radius: 10px; padding: 10px 12px; max-width: 320px; font-size: 13px; line-height: 1.35; box-shadow: 0 6px 24px rgba(0,0,0,.35); display: none; }
+    .tip .h { color: #9aa0a6; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; margin-top: 6px; }
+    .tip .row { margin-top: 4px; }
+
+    footer { position: fixed; left: 0; right: 0; bottom: 0; z-index: 3; background: linear-gradient(180deg, rgba(11,11,13,.86), rgba(11,11,13,.98)); border-top: 1px solid var(--ring); }
+    .foot { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; padding: 10px 16px; max-width: 1100px; margin: 0 auto; }
+    .foot .left { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .hint { color: var(--muted); font-size: 12px; }
+
+    @media (max-width: 820px) { .controls { grid-template-columns: auto; } #search { width: 140px; } .stats { grid-template-columns: repeat(2, 1fr); } }
+    .tile { cursor: grab; }
+    .tile.dragging { opacity: .6; }
+    .tile.drag-over { box-shadow: 0 0 0 2px rgba(125,211,252,.5) inset, 0 0 0 3px rgba(125,211,252,.2) inset; }
+    .tile { cursor: grab; }
+    .tile.dragging { opacity: .6; }
+    /* visual drop line (between tiles) */
+    #dropLine { position: fixed; width: 3px; background: linear-gradient(180deg, rgba(125,211,252,.95), rgba(167,243,208,.95)); box-shadow: 0 0 18px rgba(125,211,252,.55); border-radius: 2px; height: 60px; transform: translateY(-6px) scaleY(.9); opacity: 0; pointer-events: none; transition: opacity .12s ease, transform .12s ease; z-index: 50; }
+    #dropLine.show { opacity: 1; transform: translateY(-6px) scaleY(1); }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <h1>JLPT Kanji Tracker</h1>
+      <div class="sub">good luck on your studies! Tags are read-only in the UI.</div>
+      <div class="controls">
+        <input id="search" type="search" placeholder="Search …" aria-label="Search kanji" />
+        <div class="toggles">
+          <!-- Left: stacked select/clear all for tags -->
+          <div class="stack" aria-label="Tag mass toggle">
+            <button class="btn mini" id="btnAllTags">✓ All tags</button>
+            <button class="btn mini" id="btnNoneTags">✗ No tags</button>
+          </div>
+          <!-- Next: stacked only-known / only-unknown -->
+          <div class="stack" aria-label="Known filters">
+            <button class="btn mini" id="btnOnlyKnown" aria-pressed="false">Only known</button>
+            <button class="btn mini" id="btnOnlyUnknown" aria-pressed="false">Only unknown</button>
+          </div>
+          <!-- Then: tag chips -->
+          <div id="tagChips" class="chipbar" aria-label="Tags"></div>
+        </div>
+      </div>
+
+      <div class="stats" id="stats" style="display:none;">
+        <div class="card"><div class="hint">Known</div><div class="stat-big" id="knownCount">0</div></div>
+        <div class="card"><div class="hint">Unknown</div><div class="stat-big" id="unknownCount">0</div></div>
+        <div class="card"><div class="hint">Total</div><div class="stat-big" id="totalCount">0</div></div>
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <div class="hint">Completion</div>
+            <div id="percentLabel" class="hint">0%</div>
+          </div>
+          <div class="bar"><i id="barFill"></i></div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div id="empty" style="display:flex; align-items:center; justify-content:center; padding: 48px 0 120px;">
+      <div class="box" style="background: var(--panel); border:1px solid var(--ring); border-radius:16px; padding:20px; max-width:740px;">
+        <p><strong>No data loaded.</strong> Click <span class="hint">Import</span> below and provide a JSON file with this shape:</n>
+<pre style="white-space:pre-wrap;line-height:1.3;background:#0e1422;border:1px solid #1f2a44;padding:12px;border-radius:12px;overflow:auto;">
+{
+  "items": [
+    { "ch": "会", "known": 1, "tags": ["n4"],
+      "meaning": ["to meet", "association"],
+      "kun": ["あ.う"],
+      "on": ["カイ"] },
+    { "ch": "同", "known": 0, "tags": ["n4","n5"],
+      "meaning": ["same"],
+      "kun": ["おな.じ"],
+      "on": ["ドウ"] }
+  ]
+}
+</pre>
+        <p class="hint">Order in <code>items</code> controls the grid order. Hover a tile to see meaning + readings.</p>
+      </div>
+    </div>
+    <div id="grid" class="grid" aria-live="polite" style="display:none;"></div>
+    <div id="tooltip" class="tip" role="tooltip" aria-hidden="true"></div>
+  </main>
+
+  <footer>
+    <div class="foot">
+      <div class="left">
+        <button class="btn" id="importBtn">Import</button>
+        <button class="btn" id="exportBtn">Export</button>
+        <input id="file" type="file" accept="application/json" style="display:none;" />
+        <span class="hint" id="savedHint">Waiting for JSON…</span>
+      </div>
+      <div class="hint">Shift+Click toggles a range. Tags and metadata come from your JSON. Drag tiles to reorder; order is saved and exported.</div>
+    </div>
+  </footer>
+
+  <script>
+    const KEY = 'jlpt_kanji_tracker_v5';
+
+    // State
+    let ITEMS = []; // [{ch, known(0|1), tags:[..], meaning:[..], kun:[..], on:[..]}]
+    let activeTags = new Set();
+    let knownMode = 'all'; // 'all' | 'known' | 'unknown'
+
+    // DOM
+    const grid = document.getElementById('grid');
+    const statsBox = document.getElementById('stats');
+    const emptyBox = document.getElementById('empty');
+    const searchEl = document.getElementById('search');
+    const knownEl = document.getElementById('knownCount');
+    const unknownEl = document.getElementById('unknownCount');
+    const totalEl = document.getElementById('totalCount');
+    const percentLabel = document.getElementById('percentLabel');
+    const barFill = document.getElementById('barFill');
+    const savedHint = document.getElementById('savedHint');
+    const tooltip = document.getElementById('tooltip');
+    const tagChips = document.getElementById('tagChips');
+    const btnAllTags = document.getElementById('btnAllTags');
+    const btnNoneTags = document.getElementById('btnNoneTags');
+    const btnOnlyKnown = document.getElementById('btnOnlyKnown');
+    const btnOnlyUnknown = document.getElementById('btnOnlyUnknown');
+
+    // Init (load cached JSON if any)
+    async function bootstrap(){
+      // 1) Try localStorage first
+      let loaded = false;
+      const raw = localStorage.getItem(KEY);
+      if (raw) {
+        try {
+          const obj = JSON.parse(raw);
+          if (obj && Array.isArray(obj.items)) {
+            ITEMS = normalizeItems(obj.items);
+            loaded = true;
+          }
+        } catch {}
+      }
+      // 2) If nothing loaded, try auto-import kanji-data.json from same folder
+      if (!loaded) {
+        savedHint.textContent = 'Auto-importing kanji-data.json …';
+        try {
+          const res = await fetch('./kanji-data.json', { cache: 'no-store' });
+          if (res.ok) {
+            const obj = await res.json();
+            if (obj && Array.isArray(obj.items)) {
+              ITEMS = normalizeItems(obj.items);
+              save();
+              loaded = true;
+              savedHint.textContent = 'Imported kanji-data.json';
+            } else {
+              savedHint.textContent = 'kanji-data.json: invalid format';
+            }
+          } else {
+            savedHint.textContent = 'kanji-data.json not found';
+          }
+        } catch(e){
+          savedHint.textContent = 'Auto-import failed';
+        }
+      }
+      render();
+    }
+    bootstrap();
+
+    function normalizeItems(arr) {
+      return arr.map(x => ({
+        ch: String(x.ch),
+        known: x.known ? 1 : 0,
+        tags: Array.isArray(x.tags) ? Array.from(new Set(x.tags.map(String))) : [],
+        meaning: Array.isArray(x.meaning) ? x.meaning.map(String) : [],
+        kun: Array.isArray(x.kun) ? x.kun.map(String) : [],
+        on: Array.isArray(x.on) ? x.on.map(String) : [],
+      }));
+    }
+
+    // Render
+    let lastClickedIndex = null;
+    // drag state
+    let dragFrom = null; // index being dragged
+    let dropSide = 'left'; // 'left' | 'right'
+    let dropLine = null; // DOM element for visual guide
+    function render(){
+      const hasData = ITEMS.length > 0;
+      emptyBox.style.display = hasData ? 'none' : '';
+      grid.style.display = hasData ? '' : 'none';
+      statsBox.style.display = hasData ? '' : 'none';
+
+      if (!hasData) { updateStats(); buildTagChips(); return; }
+
+      const q = searchEl.value.trim();
+      grid.innerHTML = '';
+      // ensure dropLine exists
+      if (!dropLine) { dropLine = document.createElement('div'); dropLine.id = 'dropLine'; document.body.appendChild(dropLine); }
+
+      ITEMS.forEach((item, i) => {
+        const isKnown = !!item.known;
+        let show = true;
+        if (q && !item.ch.includes(q)) show = false;
+        if (knownMode === 'known' && !isKnown) show = false;
+        if (knownMode === 'unknown' && isKnown) show = false;
+        if (activeTags.size === 0) {
+          show = false;
+        } else {
+          const hasAny = [...activeTags].some(t => (item.tags||[]).includes(t));
+          if (!hasAny) show = false;
+        }
+        if (!show) return;
+
+        const el = document.createElement('button');
+        el.className = 'tile ' + (isKnown ? 'known' : 'unknown');
+        el.textContent = item.ch;
+        el.setAttribute('draggable', 'true');
+        el.dataset.index = i;
+        // Click to toggle known
+        el.addEventListener('click', (e) => {
+          const idx = i;
+          if (e.shiftKey && lastClickedIndex != null) {
+            const [a,b] = [lastClickedIndex, idx].sort((x,y)=>x-y);
+            const to = ITEMS[idx].known ? 0 : 1;
+            for (let k=a; k<=b; k++) ITEMS[k].known = to;
+          } else {
+            ITEMS[idx].known = ITEMS[idx].known ? 0 : 1;
+            lastClickedIndex = idx;
+          }
+          save();
+          render();
+        });
+        // Tooltip handlers
+        el.addEventListener('mouseenter', (ev)=> showTip(ev, item));
+        el.addEventListener('mousemove', (ev)=> moveTip(ev));
+        el.addEventListener('mouseleave', hideTip);
+        el.addEventListener('focus', (ev)=> showTip(ev, item));
+        el.addEventListener('blur', hideTip);
+        // Drag & drop reorder
+        el.addEventListener('dragstart', (ev)=>{
+          dragFrom = i;
+          ev.dataTransfer.setData('text/plain', String(i));
+          ev.dataTransfer.effectAllowed = 'move';
+          el.classList.add('dragging');
+        });
+        el.addEventListener('dragend', ()=>{
+          el.classList.remove('dragging');
+          if (dropLine) dropLine.classList.remove('show');
+        });
+        el.addEventListener('dragover', (ev)=>{
+          ev.preventDefault();
+          const r = el.getBoundingClientRect();
+          const midX = r.left + r.width/2;
+          const onLeft = ev.clientX < midX;
+          dropSide = onLeft ? 'left' : 'right';
+          // position dropLine at left or right edge of the tile
+          const x = onLeft ? r.left : r.right;
+          const y = r.top + window.scrollY;
+          if (dropLine) {
+            dropLine.style.left = Math.round(x) + 'px';
+            dropLine.style.top = Math.round(y) + 'px';
+            dropLine.style.height = Math.round(r.height) + 'px';
+            dropLine.classList.add('show');
+          }
+        });
+        el.addEventListener('dragleave', ()=>{
+          // no-op: next tile will update line position
+        });
+        el.addEventListener('drop', (ev)=>{
+          ev.preventDefault();
+          if (dropLine) dropLine.classList.remove('show');
+          const fromIdx = dragFrom != null ? dragFrom : Number(ev.dataTransfer.getData('text/plain'));
+          const toIdx = i;
+          if (!Number.isInteger(fromIdx) || fromIdx === toIdx) return;
+          // compute target insertion index based on side
+          let target = dropSide === 'left' ? toIdx : toIdx + 1;
+          // adjust for removal shifting indices
+          if (fromIdx < target) target -= 1;
+          if (target < 0) target = 0;
+          if (target > ITEMS.length) target = ITEMS.length;
+          const moved = ITEMS.splice(fromIdx,1)[0];
+          ITEMS.splice(target, 0, moved);
+          save();
+          render();
+        });
+
+        grid.appendChild(el);
+      });
+
+      updateStats();
+      buildTagChips();
+    }
+
+    // Tooltip
+    function showTip(ev, item){
+      const m = item.meaning && item.meaning.length ? item.meaning.join('、 ') : '—';
+      const kun = item.kun && item.kun.length ? item.kun.join('、 ') : '—';
+      const on = item.on && item.on.length ? item.on.join('、 ') : '—';
+      tooltip.innerHTML = `<div class="row"><strong style=\"font-size:16px;\">${item.ch}</strong></div>
+        <div class=\"h\">Meaning</div><div class=\"row\">${escapeHtml(m)}</div>
+        <div class=\"h\">Kun</div><div class=\"row\">${escapeHtml(kun)}</div>
+        <div class=\"h\">On</div><div class=\"row\">${escapeHtml(on)}</div>`;
+      tooltip.style.display = 'block';
+      tooltip.setAttribute('aria-hidden', 'false');
+      moveTip(ev);
+    }
+    function moveTip(ev){
+      const pad = 14;
+      const x = ev.clientX + pad;
+      const y = ev.clientY + pad;
+      const rect = tooltip.getBoundingClientRect();
+      const maxX = window.innerWidth - rect.width - 8;
+      const maxY = window.innerHeight - rect.height - 8;
+      tooltip.style.left = Math.min(x, maxX) + 'px';
+      tooltip.style.top = Math.min(y, maxY) + 'px';
+    }
+    function hideTip(){ tooltip.style.display='none'; tooltip.setAttribute('aria-hidden','true'); }
+
+    function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c])); }
+
+    // Stats
+    function updateStats(){
+      const total = ITEMS.length;
+      const known = ITEMS.reduce((n,x)=> n + (x.known?1:0), 0);
+      const unknown = total - known;
+      totalEl.textContent = total;
+      knownEl.textContent = known;
+      unknownEl.textContent = unknown;
+      const pct = total ? Math.round((known/total)*100) : 0;
+      percentLabel.textContent = pct + '%';
+      barFill.style.width = pct + '%';
+    }
+
+    // Tag chips & controls
+    function buildTagChips(){
+      const prev = new Set(activeTags);
+      const all = new Set();
+      ITEMS.forEach(x => (x.tags||[]).forEach(t => all.add(t)));
+      const tags = Array.from(all).sort();
+
+      tagChips.innerHTML = '';
+      tags.forEach(t => {
+        const b = document.createElement('button');
+        const on = activeTags.has(t);
+        b.className = 'btn mini';
+        b.innerHTML = (on ? '✓ ' : '') + '# ' + t;
+        b.setAttribute('data-tag', t);
+        b.setAttribute('aria-pressed', on);
+        b.addEventListener('click', ()=>{
+          if (activeTags.has(t)) activeTags.delete(t); else activeTags.add(t);
+          render();
+        });
+        tagChips.appendChild(b);
+      });
+
+      // Known toggles visual state
+      btnOnlyKnown.setAttribute('aria-pressed', knownMode === 'known');
+      btnOnlyUnknown.setAttribute('aria-pressed', knownMode === 'unknown');
+    }
+
+    // Save
+    function save(){
+      const payload = { items: ITEMS };
+      localStorage.setItem(KEY, JSON.stringify(payload));
+      savedHint.textContent = 'Saved';
+      clearTimeout(save._t); save._t = setTimeout(()=>savedHint.textContent=' ', 1200);
+    }
+
+    // Events
+    searchEl.addEventListener('input', render);
+    btnAllTags.addEventListener('click', ()=>{ activeTags = new Set(Array.from(new Set(ITEMS.flatMap(x=>x.tags||[])))); render(); });
+    btnNoneTags.addEventListener('click', ()=>{ activeTags.clear(); render(); });
+    btnOnlyKnown.addEventListener('click', ()=>{ knownMode = (knownMode === 'known' ? 'all' : 'known'); render(); });
+    btnOnlyUnknown.addEventListener('click', ()=>{ knownMode = (knownMode === 'unknown' ? 'all' : 'unknown'); render(); });
+
+    // Import / Export
+    document.getElementById('importBtn').onclick = () => document.getElementById('file').click();
+    document.getElementById('file').addEventListener('change', (e) => {
+      const file = e.target.files?.[0]; if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const obj = JSON.parse(String(reader.result));
+          if (obj && Array.isArray(obj.items)) {
+            ITEMS = normalizeItems(obj.items);
+            save();
+            render();
+          } else {
+            alert('Invalid file. Expect { "items": [ {"ch":"会","known":1,"tags":["n4"],"meaning":[...],"kun":[...],"on":[...] }, ... ] }');
+          }
+        } catch { alert('Invalid file'); }
+      };
+      reader.readAsText(file);
+      e.target.value = '';
+    });
+
+    document.getElementById('exportBtn').onclick = () => {
+      if (!ITEMS.length) { alert('Nothing to export. Import a JSON first.'); return; }
+      const out = { items: ITEMS.map(x => ({ ch: x.ch, known: x.known?1:0, tags: (x.tags||[]), meaning: (x.meaning||[]), kun: (x.kun||[]), on: (x.on||[]) })) };
+      const blob = new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'jlpt-kanji-items.json';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    };
+  </script>
+</body>
+</html>
