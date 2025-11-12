@@ -188,23 +188,6 @@
     async function bootstrap(){
   let loaded = false;
 
-  // 1) Try localStorage first
-  const raw = localStorage.getItem(KEY);
-  if (raw) {
-    try {
-      const obj = JSON.parse(raw);
-      if (obj && Array.isArray(obj.items)) {
-        ITEMS = normalizeItems(obj.items);
-        loaded = ITEMS.length > 0;            // only loaded if there are items
-      }
-      // restore filters if you ever add persistence later
-    } catch {}
-  }
-
-  // 2) If nothing loaded, try auto-import
-  async function bootstrap(){
-  let loaded = false;
-
   // 1) Try localStorage
   const raw = localStorage.getItem(KEY);
   if (raw) {
@@ -255,6 +238,7 @@
   }
 }
 
+  
     window.addEventListener('load', bootstrap);
 
     function normalizeItems(arr) {
