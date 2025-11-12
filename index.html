@@ -194,7 +194,8 @@
           const obj = JSON.parse(raw);
           if (obj && Array.isArray(obj.items)) {
             ITEMS = normalizeItems(obj.items);
-            loaded = true;
+            loaded = ITEMS.length > 0;
+            if (loaded) save();
           }
         } catch {}
       }
@@ -286,6 +287,7 @@
             lastClickedIndex = idx;
           }
           save();
+          if (ITEMS.length && activeTags.size === 0) setAllTagsActive();
           render();
         });
         // Tooltip handlers
@@ -339,6 +341,7 @@
           const moved = ITEMS.splice(fromIdx,1)[0];
           ITEMS.splice(target, 0, moved);
           save();
+          if (ITEMS.length && activeTags.size === 0) setAllTagsActive();
           render();
         });
 
@@ -405,7 +408,6 @@
         b.setAttribute('data-tag', t);
         b.setAttribute('aria-pressed', on);
         b.addEventListener('click', ()=>{
-          if (activeTags.has(t)) activeTags.delete(t); else activeTags.add(t);
           render();
         });
         tagChips.appendChild(b);
@@ -443,6 +445,7 @@
             ITEMS = normalizeItems(obj.items);
             setAllTagsActive();
             save();
+            if (ITEMS.length && activeTags.size === 0) setAllTagsActive();
             render();
           } else {
             alert('Invalid file. Expect { "items": [ {"ch":"会","known":1,"tags":["n4"],"meaning":[...],"kun":[...],"on":[...] }, ... ] }');
