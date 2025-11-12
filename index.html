@@ -196,6 +196,8 @@
             ITEMS = normalizeItems(obj.items);
             loaded = ITEMS.length > 0;
             if (loaded) save();
+            if (loaded) setAllTagsActive();
+            if (loaded) {render();}
           }
         } catch {}
       }
@@ -208,8 +210,10 @@
             const obj = await res.json();
             if (obj && Array.isArray(obj.items)) {
               ITEMS = normalizeItems(obj.items);
+              setAllTagsActive();
               save();
               loaded = true;
+              render();
               savedHint.textContent = 'Imported kanji-data.json';
             } else {
               savedHint.textContent = 'kanji-data.json: invalid format';
