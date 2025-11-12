@@ -177,6 +177,13 @@
     const btnOnlyKnown = document.getElementById('btnOnlyKnown');
     const btnOnlyUnknown = document.getElementById('btnOnlyUnknown');
 
+    function setAllTagsActive() {
+      const all = new Set();
+      ITEMS.forEach(x => (x.tags || []).forEach(t => all.add(t)));
+      activeTags = new Set(all);
+    }
+
+
     // Init (load cached JSON if any)
     async function bootstrap(){
       // 1) Try localStorage first
@@ -213,6 +220,7 @@
           savedHint.textContent = 'Auto-import failed';
         }
       }
+      if (ITEMS.length && activeTags.size === 0) setAllTagsActive();
       render();
     }
     bootstrap();
@@ -433,6 +441,7 @@
           const obj = JSON.parse(String(reader.result));
           if (obj && Array.isArray(obj.items)) {
             ITEMS = normalizeItems(obj.items);
+            setAllTagsActive();
             save();
             render();
           } else {
