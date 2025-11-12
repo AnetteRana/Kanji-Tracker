@@ -186,60 +186,56 @@
 
     // Init (load cached JSON if any)
     async function bootstrap(){
-  let loaded = false;
+    let loaded = false;
 
-  // 1) Try localStorage
-  const raw = localStorage.getItem(KEY);
-  if (raw) {
-    try {
-      const obj = JSON.parse(raw);
-      if (obj && Array.isArray(obj.items)) {
-        ITEMS = normalizeItems(obj.items);
-        loaded = ITEMS.length > 0;              // only loaded if non-empty
-        if (loaded) {
-          savedHint.textContent = `Loaded ${ITEMS.length} items from storage`;
-        }
-      }
-    } catch {
-      // ignore
-    }
-  }
-
-  // 2) If not loaded, auto-import from file
-  if (!loaded) {
-    savedHint.textContent = 'Auto-importing kanji-data.json …';
-    try {
-      const res = await fetch('./kanji-data.json', { cache: 'no-store' });
-      if (res.ok) {
-        const obj = await res.json();
+    // 1) Try localStorage
+    const raw = localStorage.getItem(KEY);
+    if (raw) {
+      try {
+        const obj = JSON.parse(raw);
         if (obj && Array.isArray(obj.items)) {
           ITEMS = normalizeItems(obj.items);
-          loaded = ITEMS.length > 0;
-          save();
-          savedHint.textContent = `Imported ${ITEMS.length} items from kanji-data.json`;
-        } else {
-          savedHint.textContent = 'kanji-data.json: invalid format';
+          loaded = ITEMS.length > 0; // only loaded if non-empty
+          if (loaded) savedHint.textContent = `Loaded ${ITEMS.length} items from storage`;
         }
-      } else {
-        savedHint.textContent = 'kanji-data.json not found';
+      } catch {}
+    }
+
+    // 2) If not loaded, auto-import from file
+    if (!loaded) {
+      savedHint.textContent = 'Auto-importing kanji-data.json …';
+      try {
+        const res = await fetch('./kanji-data.json', { cache: 'no-store' });
+        if (res.ok) {
+          const obj = await res.json();
+          if (obj && Array.isArray(obj.items)) {
+            ITEMS = normalizeItems(obj.items);
+            loaded = ITEMS.length > 0;
+            save();
+            savedHint.textContent = `Imported ${ITEMS.length} items from kanji-data.json`;
+          } else {
+            savedHint.textContent = 'kanji-data.json: invalid format';
+          }
+        } else {
+          savedHint.textContent = 'kanji-data.json not found';
+        }
+      } catch(e){
+        savedHint.textContent = 'Auto-import failed';
       }
-    } catch(e){
-      savedHint.textContent = 'Auto-import failed';
+    }
+
+    // 3) Ensure filters are ON before first render
+    if (ITEMS.length && activeTags.size === 0) setAllTagsActive();
+
+    // 4) First paint; plus a safety repaint next tick if layout timing races
+    render();
+    if (ITEMS.length && grid.children.length === 0) {
+      requestAnimationFrame(render);
     }
   }
 
-  // 3) Ensure filters are ON before first render
-  if (ITEMS.length && activeTags.size === 0) setAllTagsActive();
-
-  // 4) First paint; then a safety repaint next tick if needed
-  render();
-  if (ITEMS.length && grid.children.length === 0) {
-    requestAnimationFrame(render);
-  }
-}
-
-  
-    window.addEventListener('load', bootstrap);
+  // Run after DOM is ready
+  document.addEventListener('DOMContentLoaded', bootstrap);
 
     function normalizeItems(arr) {
       return arr.map(x => ({
