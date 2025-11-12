@@ -186,48 +186,55 @@
 
     // Init (load cached JSON if any)
     async function bootstrap(){
-      // 1) Try localStorage first
-      let loaded = false;
-      const raw = localStorage.getItem(KEY);
-      if (raw) {
-        try {
-          const obj = JSON.parse(raw);
-          if (obj && Array.isArray(obj.items)) {
-            ITEMS = normalizeItems(obj.items);
-            loaded = ITEMS.length > 0;
-            if (loaded) save();
-            if (loaded) setAllTagsActive();
-            if (loaded) {render();}
-          }
-        } catch {}
+  let loaded = false;
+
+  // 1) Try localStorage first
+  const raw = localStorage.getItem(KEY);
+  if (raw) {
+    try {
+      const obj = JSON.parse(raw);
+      if (obj && Array.isArray(obj.items)) {
+        ITEMS = normalizeItems(obj.items);
+        loaded = ITEMS.length > 0;            // only loaded if there are items
       }
-      // 2) If nothing loaded, try auto-import kanji-data.json from same folder
-      if (!loaded) {
-        savedHint.textContent = 'Auto-importing kanji-data.json …';
-        try {
-          const res = await fetch('./kanji-data.json', { cache: 'no-store' });
-          if (res.ok) {
-            const obj = await res.json();
-            if (obj && Array.isArray(obj.items)) {
-              ITEMS = normalizeItems(obj.items);
-              setAllTagsActive();
-              save();
-              loaded = true;
-              render();
-              savedHint.textContent = 'Imported kanji-data.json';
-            } else {
-              savedHint.textContent = 'kanji-data.json: invalid format';
-            }
-          } else {
-            savedHint.textContent = 'kanji-data.json not found';
-          }
-        } catch(e){
-          savedHint.textContent = 'Auto-import failed';
+      // restore filters if you ever add persistence later
+    } catch {}
+  }
+
+  // 2) If nothing loaded, try auto-import
+  if (!loaded) {
+    savedHint.textContent = 'Auto-importing kanji-data.json …';
+    try {
+      const res = await fetch('./kanji-data.json', { cache: 'no-store' });
+      if (res.ok) {
+        const obj = await res.json();
+        if (obj && Array.isArray(obj.items)) {
+          ITEMS = normalizeItems(obj.items);
+          loaded = ITEMS.length > 0;
+          save();
+          savedHint.textContent = 'Imported kanji-data.json';
+        } else {
+          savedHint.textContent = 'kanji-data.json: invalid format';
         }
+      } else {
+        savedHint.textContent = 'kanji-data.json not found';
       }
-      if (ITEMS.length && activeTags.size === 0) setAllTagsActive();
-      render();
+    } catch(e){
+      savedHint.textContent = 'Auto-import failed';
     }
+  }
+
+  // Turn on all tags BEFORE first render
+  if (ITEMS.length && activeTags.size === 0) setAllTagsActive();
+
+  // First paint
+  render();
+
+  // Safety: if for any reason grid ended up empty but ITEMS exist, repaint next tick
+  if (ITEMS.length && grid.children.length === 0) {
+    requestAnimationFrame(render);
+  }
+}
     bootstrap();
 
     function normalizeItems(arr) {
