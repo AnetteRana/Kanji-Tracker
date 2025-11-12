@@ -202,6 +202,27 @@
   }
 
   // 2) If nothing loaded, try auto-import
+  async function bootstrap(){
+  let loaded = false;
+
+  // 1) Try localStorage
+  const raw = localStorage.getItem(KEY);
+  if (raw) {
+    try {
+      const obj = JSON.parse(raw);
+      if (obj && Array.isArray(obj.items)) {
+        ITEMS = normalizeItems(obj.items);
+        loaded = ITEMS.length > 0;              // only loaded if non-empty
+        if (loaded) {
+          savedHint.textContent = `Loaded ${ITEMS.length} items from storage`;
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // 2) If not loaded, auto-import from file
   if (!loaded) {
     savedHint.textContent = 'Auto-importing kanji-data.json …';
     try {
@@ -212,7 +233,7 @@
           ITEMS = normalizeItems(obj.items);
           loaded = ITEMS.length > 0;
           save();
-          savedHint.textContent = 'Imported kanji-data.json';
+          savedHint.textContent = `Imported ${ITEMS.length} items from kanji-data.json`;
         } else {
           savedHint.textContent = 'kanji-data.json: invalid format';
         }
@@ -224,18 +245,17 @@
     }
   }
 
-  // Turn on all tags BEFORE first render
+  // 3) Ensure filters are ON before first render
   if (ITEMS.length && activeTags.size === 0) setAllTagsActive();
 
-  // First paint
+  // 4) First paint; then a safety repaint next tick if needed
   render();
-
-  // Safety: if for any reason grid ended up empty but ITEMS exist, repaint next tick
   if (ITEMS.length && grid.children.length === 0) {
     requestAnimationFrame(render);
   }
 }
-    bootstrap();
+
+    window.addEventListener('load', bootstrap);
 
     function normalizeItems(arr) {
       return arr.map(x => ({
@@ -419,8 +439,11 @@
         b.setAttribute('data-tag', t);
         b.setAttribute('aria-pressed', on);
         b.addEventListener('click', ()=>{
+          if (activeTags.has(t)) activeTags.delete(t); else activeTags.add(t);
+          save();
           render();
         });
+
         tagChips.appendChild(b);
       });
 
@@ -439,10 +462,27 @@
 
     // Events
     searchEl.addEventListener('input', render);
-    btnAllTags.addEventListener('click', ()=>{ activeTags = new Set(Array.from(new Set(ITEMS.flatMap(x=>x.tags||[])))); render(); });
-    btnNoneTags.addEventListener('click', ()=>{ activeTags.clear(); render(); });
-    btnOnlyKnown.addEventListener('click', ()=>{ knownMode = (knownMode === 'known' ? 'all' : 'known'); render(); });
-    btnOnlyUnknown.addEventListener('click', ()=>{ knownMode = (knownMode === 'unknown' ? 'all' : 'unknown'); render(); });
+    btnAllTags.addEventListener('click', ()=>{
+      activeTags = new Set(Array.from(new Set(ITEMS.flatMap(x=>x.tags||[]))));
+      save();
+      render();
+    });
+    btnNoneTags.addEventListener('click', ()=>{
+      activeTags.clear();
+      save();
+      render();
+    });
+    btnOnlyKnown.addEventListener('click', ()=>{
+      knownMode = (knownMode === 'known' ? 'all' : 'known');
+      save();
+      render();
+    });
+    btnOnlyUnknown.addEventListener('click', ()=>{
+      knownMode = (knownMode === 'unknown' ? 'all' : 'unknown');
+      save();
+      render();
+    });
+
 
     // Import / Export
     document.getElementById('importBtn').onclick = () => document.getElementById('file').click();
